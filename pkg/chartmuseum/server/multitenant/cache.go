@@ -94,7 +94,9 @@ func (server *MultiTenantServer) primeCache() error {
 // getChartList fetches from the server and accumulates concurrent requests to be fulfilled all at once.
 func (server *MultiTenantServer) getChartList(log cm_logger.LoggingFn, repo string) <-chan fetchedObjects {
 	ch := make(chan fetchedObjects, 1)
+	server.TenantCacheKeyLock.Lock()
 	tenant := server.Tenants[repo]
+	server.TenantCacheKeyLock.Unlock()
 
 	tenant.FetchedObjectsLock.Lock()
 	tenant.FetchedObjectsChans = append(tenant.FetchedObjectsChans, ch)
@@ -122,7 +124,9 @@ func (server *MultiTenantServer) getChartList(log cm_logger.LoggingFn, repo stri
 
 func (server *MultiTenantServer) regenerateRepositoryIndex(log cm_logger.LoggingFn, entry *cacheEntry, diff cm_storage.ObjectSliceDiff) <-chan indexRegeneration {
 	ch := make(chan indexRegeneration, 1)
+	server.TenantCacheKeyLock.Lock()
 	tenant := server.Tenants[entry.RepoName]
+	server.TenantCacheKeyLock.Unlock()
 
 	tenant.RegenerationLock.Lock()
 	tenant.RegeneratedIndexesChans = append(tenant.RegeneratedIndexesChans, ch)
@@ -507,7 +511,9 @@ func (server *MultiTenantServer) startEventListener() {
 		}
 		index := entry.RepoIndex
 
+		server.TenantCacheKeyLock.Lock()
 		tenant, ok := server.Tenants[e.RepoName]
+		server.TenantCacheKeyLock.Unlock()
 		if !ok {
 			log(cm_logger.ErrorLevel, "Error find tenants repo name", zap.Error(err), zap.String("repo", repo))
 			continue
@@ -562,6 +568,8 @@ func (server *MultiTenantServer) startEventListener() {
 }
 
 func (server *MultiTenantServer) rebuildIndex() {
+	server.TenantCacheKeyLock.Lock()
+	defer server.TenantCacheKeyLock.Unlock()
 	if len(server.Tenants) == 0 {
 		return
 	}
